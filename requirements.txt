@@ -1,0 +1,17 @@
+# Core (required)
+pandas>=2.0
+numpy>=1.24
+python-dotenv>=1.0
+
+# Testing
+pytest>=7.4
+
+# Optional — real Alpaca paper/live trading. The repo runs without it
+# (SimBroker + synthetic data need none of these).
+# alpaca-py>=0.20
+
+# Optional — real historical/live price bars from Yahoo Finance.
+# yfinance>=0.2
+
+# Optional — HTTP for a real news-sentiment provider.
+# requests>=2.31
