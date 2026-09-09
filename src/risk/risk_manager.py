@@ -37,6 +37,7 @@ class RiskManager:
         max_open_positions: int = 4,
         allow_fractional: bool = False,
         min_order_notional: float = 1.0,
+        trailing_stop_pct: float = 0.0,
     ):
         self.max_position_pct = max_position_pct
         self.max_total_exposure_pct = max_total_exposure_pct
@@ -48,9 +49,13 @@ class RiskManager:
         # since a single share of SPY/QQQ costs far more than $10.
         self.allow_fractional = allow_fractional
         self.min_order_notional = min_order_notional
+        # Trailing stop: exit if price falls this % from its peak since entry.
+        # This is the "lock in part of the gain" idea. 0 disables it.
+        self.trailing_stop_pct = trailing_stop_pct
 
         self._day_start_equity: Optional[float] = None
         self._halted = False
+        self._peak: Dict[str, float] = {}  # highest price seen per open position
 
     # --- daily loss guard -------------------------------------------------
     def start_day(self, equity: float) -> None:
@@ -72,14 +77,30 @@ class RiskManager:
 
     # --- protective exits -------------------------------------------------
     def protective_exits(self, account: Account, prices: Dict[str, float]) -> List[RiskDecision]:
-        """Stop-loss / take-profit exits, evaluated before new entries."""
+        """Stop-loss / take-profit / trailing-stop exits, before new entries."""
         exits: List[RiskDecision] = []
+        held = set(account.positions)
+        # Forget peaks for positions we no longer hold.
+        for sym in [s for s in self._peak if s not in held]:
+            del self._peak[sym]
+
         for sym, pos in account.positions.items():
             price = prices.get(sym)
             if price is None or pos.qty == 0:
                 continue
+            # Track the high-water mark since we entered this position.
+            peak = max(self._peak.get(sym, pos.avg_entry_price), price)
+            self._peak[sym] = peak
+
             ret = (price - pos.avg_entry_price) / pos.avg_entry_price
-            if ret <= -self.stop_loss_pct:
+            drop_from_peak = (peak - price) / peak if peak > 0 else 0.0
+
+            if self.trailing_stop_pct > 0 and drop_from_peak >= self.trailing_stop_pct:
+                # Locks in gains once we're up, and caps losses if we never got up.
+                exits.append(RiskDecision(sym, OrderSide.SELL, abs(pos.qty),
+                                          f"trailing-stop: -{drop_from_peak:.3f} from peak "
+                                          f"(P/L {ret:+.3f})"))
+            elif ret <= -self.stop_loss_pct:
                 exits.append(RiskDecision(sym, OrderSide.SELL, abs(pos.qty),
                                           f"stop-loss {ret:.3f} <= -{self.stop_loss_pct}"))
             elif ret >= self.take_profit_pct:
