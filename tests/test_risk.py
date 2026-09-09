@@ -1,3 +1,5 @@
+import pytest
+
 from src.brokers.base import Account, OrderSide, Position
 from src.risk.risk_manager import RiskManager
 from src.strategies.base import Signal, SignalAction
@@ -49,6 +51,32 @@ def test_take_profit_triggers_exit():
     exits = rm.protective_exits(acct, {"SPY": 420.0})  # +5%
     assert len(exits) == 1
     assert "take-profit" in exits[0].reason
+
+
+def test_fractional_sizing_lets_tiny_account_trade():
+    # $10 can't buy a whole $400 share, but fractional lets it buy 0.025 shares.
+    rm = RiskManager(max_position_pct=1.0, max_open_positions=1, allow_fractional=True,
+                     min_order_notional=1.0)
+    acct = make_account(cash=10.0)
+    signals = [Signal("SPY", SignalAction.BUY, strength=1.0)]
+    decisions = rm.size_orders(signals, acct, {"SPY": 400.0})
+    assert len(decisions) == 1
+    assert decisions[0].qty == pytest.approx(0.025, abs=1e-6)
+
+
+def test_non_fractional_tiny_account_places_no_trade():
+    rm = RiskManager(max_position_pct=1.0, max_open_positions=1, allow_fractional=False)
+    acct = make_account(cash=10.0)
+    signals = [Signal("SPY", SignalAction.BUY, strength=1.0)]
+    assert rm.size_orders(signals, acct, {"SPY": 400.0}) == []
+
+
+def test_below_min_notional_is_skipped():
+    rm = RiskManager(max_position_pct=0.05, max_open_positions=1, allow_fractional=True,
+                     min_order_notional=1.0)
+    acct = make_account(cash=10.0)  # 5% of $10 = $0.50, below the $1 minimum
+    signals = [Signal("SPY", SignalAction.BUY, strength=1.0)]
+    assert rm.size_orders(signals, acct, {"SPY": 400.0}) == []
 
 
 def test_max_open_positions_enforced():

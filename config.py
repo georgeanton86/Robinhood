@@ -63,6 +63,8 @@ class RiskConfig:
     stop_loss_pct: float = 0.02
     take_profit_pct: float = 0.04
     max_open_positions: int = 4
+    allow_fractional: bool = False
+    min_order_notional: float = 1.0
 
 
 @dataclass
@@ -130,6 +132,9 @@ def load_settings() -> Settings:
             stop_loss_pct=_get_float("STOP_LOSS_PCT", 0.02),
             take_profit_pct=_get_float("TAKE_PROFIT_PCT", 0.04),
             max_open_positions=_get_int("MAX_OPEN_POSITIONS", 4),
+            allow_fractional=_get("ALLOW_FRACTIONAL", "false").strip().lower()
+            in {"1", "true", "yes"},
+            min_order_notional=_get_float("MIN_ORDER_NOTIONAL", 1.0),
         ),
         strategy=StrategyConfig(
             momentum_lookback=_get_int("MOMENTUM_LOOKBACK", 10),

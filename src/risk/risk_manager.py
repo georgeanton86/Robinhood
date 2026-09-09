@@ -35,6 +35,8 @@ class RiskManager:
         stop_loss_pct: float = 0.02,
         take_profit_pct: float = 0.04,
         max_open_positions: int = 4,
+        allow_fractional: bool = False,
+        min_order_notional: float = 1.0,
     ):
         self.max_position_pct = max_position_pct
         self.max_total_exposure_pct = max_total_exposure_pct
@@ -42,6 +44,10 @@ class RiskManager:
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
         self.max_open_positions = max_open_positions
+        # Fractional shares let a tiny account (e.g. $10) actually place trades,
+        # since a single share of SPY/QQQ costs far more than $10.
+        self.allow_fractional = allow_fractional
+        self.min_order_notional = min_order_notional
 
         self._day_start_equity: Optional[float] = None
         self._halted = False
@@ -127,7 +133,14 @@ class RiskManager:
             per_pos_cap = equity * self.max_position_pct
             exposure_room = max(0.0, equity * self.max_total_exposure_pct - current_exposure)
             budget = min(per_pos_cap, exposure_room, cash_available) * max(0.0, min(1.0, sig.strength))
-            qty = int(budget // price)
+            if self.allow_fractional:
+                # Buy a fractional share worth `budget`, if it clears the broker's
+                # minimum order size.
+                if budget < self.min_order_notional:
+                    continue
+                qty = round(budget / price, 6)
+            else:
+                qty = int(budget // price)
             if qty <= 0:
                 continue
 

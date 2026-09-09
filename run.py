@@ -39,6 +39,8 @@ def _build_risk(settings):
         stop_loss_pct=r.stop_loss_pct,
         take_profit_pct=r.take_profit_pct,
         max_open_positions=r.max_open_positions,
+        allow_fractional=r.allow_fractional,
+        min_order_notional=r.min_order_notional,
     )
 
 
